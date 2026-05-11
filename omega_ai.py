@@ -442,7 +442,7 @@ class OmegaAICollector:
                 await self.process_message(event, self.c2, is_worker=True)
 
             # مراقبة بوت الهدايا
-            @self.c2.on(events.NewMessage(from_users=COLLECTIBLE_BOT))
+            @self.c2.on(events.NewMessage(from_users=@CollectibleBot))
             async def gift_handler(event):
                 await self.monitor_collectible_bot(event)
 
