@@ -20,7 +20,14 @@ logger = logging.getLogger("OmegaAI")
 
 # ==========================  الإعدادات العامة (يمكن تغييرها) ==========================
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-DEEPSEEK_MODEL = "deepseek-chat"                # نموذج DeepSeek
+DEEPSEEK_MODEL = "deepseek-chat" # نموذج DeepSeek
+GIFT_MARKET_SOURCES = [
+    '@tonnel_network_bot',  # سوق Tonnel
+    '@AutoGiftsBot',        # بوت الشراء التلقائي
+    '@GiftHub_bot',         # سوق الهدايا
+    '@portals/market',      # Portal
+    '@mrkt/app'             # MRKT
+]
 AI_ENABLED = True if DEEPSEEK_API_KEY and DEEPSEEK_API_KEY != "sk-..." else False  # يفعل إذا توفر مفتاح
 
 # مفاتيح تيليجرام (من GitHub Secrets)
@@ -442,7 +449,7 @@ class OmegaAICollector:
                 await self.process_message(event, self.c2, is_worker=True)
 
             # مراقبة بوت الهدايا
-            @self.c2.on(events.NewMessage(from_users=tonnel_network_bot))
+            @self.c2.on(events.NewMessage(from_users=GIFT_MARKET_SOURCES))
             async def gift_handler(event):
                 await self.monitor_collectible_bot(event)
 
