@@ -1,5 +1,4 @@
 name: Omega UltimateX 24/7
-
 on:
   schedule:
     - cron: '0 */6 * * *'
