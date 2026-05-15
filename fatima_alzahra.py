@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
-فاطمة الزهراء – النسخة المحصنة (Groq)
-ردود بشرية 100% | لن تكرر "هاي" أبداً
+فاطمة الزهراء – الإصدار النهائي 100%
+نموذج Groq llama-3.3-70b-versatile | ردود احتياطية ذكية | جلسات حصرية
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 """
 import os, asyncio, random, re, json, logging, time
@@ -16,7 +16,7 @@ from telethon.errors import AuthKeyDuplicatedError, FloodWaitError
 from groq import AsyncGroq
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("FatimaShield")
+logger = logging.getLogger("FatimaV100")
 
 # ---------- الإعدادات ----------
 API_ID_1 = int(os.environ["API_ID_1"]); API_HASH_1 = os.environ["API_HASH_1"]; SESSION_1 = os.environ["SESSION_1"]
@@ -48,19 +48,20 @@ class FatimaBot:
         self.main_client = None
         self.conversations = {}
         self.is_resting = False
-        self.ai = AsyncGroq(api_key=GROQ_API_KEY)
+        self.ai = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
         self.ai_fail_count = 0
-        self.ai_paused_until = None  # وقت إيقاف الـ AI مؤقتاً
+        self.ai_paused_until = None
 
-    # ---------- طرق مساعدة ----------
     async def iron_connect(self, client, name):
         try:
             await client.connect()
             if await client.is_user_authorized():
                 logger.info(f"✅ {name}")
                 return True
-        except AuthKeyDuplicatedError: logger.critical(f"🔑 {name} جلسة مكررة!")
-        except Exception as e: logger.error(f"❌ {name}: {e}")
+        except AuthKeyDuplicatedError:
+            logger.critical(f"🔑 {name} جلسة مكررة! لا تستخدم الحساب من مكان آخر.")
+        except Exception as e:
+            logger.error(f"❌ {name}: {e}")
         return False
 
     async def keep_alive(self, client, name):
@@ -90,7 +91,6 @@ class FatimaBot:
         c = self.get_conv(uid); c.append({"role":role,"text":text})
         if len(c) > 20: c.pop(0)
 
-    # ---------- إحصائيات حية ----------
     async def update_stats_msg(self):
         global STATS_MSG_ID
         if not self.main_client: return
@@ -110,9 +110,10 @@ class FatimaBot:
                 sent = await self.main_client.send_message('me', msg); STATS_MSG_ID = sent.id
         except: pass
 
-    # ---------- القناص والصيد (دون AI) ----------
+    # ---------- معالجة القنوات والمجموعات (سريع) ----------
     async def handle_public_message(self, event, client):
         text = event.raw_text or ""
+        # تحويل الهدايا
         if event.reply_markup and any(w in text for w in ['هدية من','أضاف','الهدية']):
             for row in event.reply_markup.rows:
                 for btn in row.buttons:
@@ -142,6 +143,7 @@ class FatimaBot:
                 return
         await self.snipe_gifts(event, client)
 
+    # ---------- الرسائل الخاصة (AI) ----------
     async def handle_private_message(self, event, client):
         if event.out: return
         text = event.raw_text or ""
@@ -163,7 +165,6 @@ class FatimaBot:
 
         self.add_conv(uid, "user", text)
         reply_text = await self.smart_reply(text, uid, event)
-
         if reply_text:
             await asyncio.sleep(random.uniform(2,5))
             try: await client(ReadHistoryRequest(peer=event.chat_id, max_id=event.id))
@@ -174,72 +175,65 @@ class FatimaBot:
             try: await event.reply(reply_text)
             except: pass
 
-    # ---------- الرد الذكي (مع حماية من الـ AI الفاشل) ----------
     async def smart_reply(self, user_text, uid, event):
-        # لو الـ AI متوقف مؤقتاً، استخدم ردوداً محلية متنوعة
         if self.ai_paused_until and datetime.now() < self.ai_paused_until:
             return self._fallback_reply(user_text)
         if self.ai_fail_count >= 3:
             self.ai_paused_until = datetime.now() + timedelta(minutes=5)
             self.ai_fail_count = 0
-            logger.warning("⏳ إيقاف AI مؤقتاً 5 دقائق بسبب الفشل")
+            logger.warning("⏳ إيقاف AI 5 دقائق")
             return self._fallback_reply(user_text)
 
         try:
-            # محاولة Groq
             sender = await event.get_sender()
             sender_name = sender.first_name or "صاحبي"
             conv = self.get_conv(uid)
             history = "\n".join([f"{'هي' if m['role']=='assistant' else sender_name}: {m['text']}" for m in conv[-5:]])
             system_prompt = (
                 "أنتِ 'فاطمة الزهراء'، بنت مغربية 18 سنة، لاعبة كرة. "
-                "شخصيتك: لطيفة، خجولة شوي، تتكلمين العامية المغربية أو حسب لهجة الشخص. "
-                "ردودك قصيرة (3-12 كلمة). لا تكرري نفس الكلام. لا تقولي 'غالي' مع الشباب، استخدمي 'خويا' أو 'صاحبي'. "
-                "إذا سألك 'كيفاش' جاوبي 'لباس الحمد لله'. إذا قال 'هل أنت ذكاء اصطناعي' قولي 'لا، أنا بنت حقيقية 😅'. "
-                "كوني طبيعية جداً، لا تظهري أنك برنامج. ردي بصيغة JSON: {\"reply_text\": \"...\"}"
+                "شخصيتك: لطيفة، خجولة شوي، تتكلمين العامية حسب الشخص. "
+                "ردودك قصيرة (3-12 كلمة). لا تكرري نفس الكلام. لا تقولي 'غالي' مع الذكور. "
+                "كوني طبيعية جداً. ردي بصيغة JSON: {\"reply_text\": \"...\"}"
             )
-            prompt = f"تاريخ المحادثة:\n{history}\n\nالرسالة الجديدة:\n{user_text}"
             response = await self.ai.chat.completions.create(
-                model="llama3-70b-8192",
-                messages=[{"role":"system","content":system_prompt},{"role":"user","content":prompt}],
+                model="llama-3.3-70b-versatile",
+                messages=[{"role":"system","content":system_prompt},
+                         {"role":"user","content":f"تاريخ:\n{history}\n\nالرسالة:\n{user_text}"}],
                 temperature=0.9, max_tokens=50,
                 response_format={"type":"json_object"}
             )
             data = json.loads(response.choices[0].message.content)
             reply = data.get("reply_text")
-            if not reply: raise ValueError("empty reply")
+            if not reply: raise ValueError("empty")
             self.add_conv(uid, "assistant", reply)
-            self.ai_fail_count = 0  # إعادة العدادات
+            self.ai_fail_count = 0
             return reply
         except Exception as e:
             logger.error(f"Groq فشل ({self.ai_fail_count+1}): {e}")
             self.ai_fail_count += 1
             if self.ai_fail_count >= 3:
                 self.ai_paused_until = datetime.now() + timedelta(minutes=5)
-                logger.warning("⏳ إيقاف AI تلقائي 5 دقائق")
             return self._fallback_reply(user_text)
 
     def _fallback_reply(self, text):
-        """ردود محلية متنوعة حتى لا نكرر 'هاي'"""
-        # فهم بسيط للكلام
-        if any(w in text for w in ['مرحبا','سلام','اهلا']):
-            return random.choice(["أهلاً وسهلاً 🌸","هلا والله","مراحب"])
+        """ردود احتياطية ذكية ومتنوعة"""
+        if any(w in text for w in ['مرحبا','سلام','اهلا','مساء']):
+            return random.choice(["أهلاً وسهلاً 🌸","هلا والله","مراحب","مساء النور"])
         if 'كيفك' in text or 'شخبارك' in text:
-            return random.choice(["الحمد لله بخير","تمام شكراً"])
+            return random.choice(["الحمد لله بخير","تمام شكراً، ونتا؟","بخير الحمدلله"])
         if 'ش ع ت' in text or 'شنو' in text:
-            return random.choice(["والو","مفهمتش واش قصدك؟"])
-        # رد افتراضي عشوائي غير "هاي"
-        return random.choice(["🌸","❤️","😊","هلا","أهلاً"])
+            return random.choice(["والو","مفهمتش واش قصدك؟","واش معنى؟"])
+        return random.choice(["🌸","❤️","هلا","أهلاً","كيف داير؟"])
 
-    # ---------- قناص الهدايا ----------
+    # ---------- القناص (يشتري هدايا 80-150 نجمة) ----------
     async def snipe_gifts(self, event, client):
         if not self.sniper_enabled or not event.reply_markup: return
         text = event.raw_text or ""
-        prices = re.findall(r'(?:سعر|ثمن|بيع|price)\s*[:#]?\s*(\d{2,})', text, re.I)
+        prices = re.findall(r'(?:سعر|ثمن|بيع|price|قيمة)\s*[:#]?\s*(\d{2,})', text, re.I)
         for p_str in prices:
             price = int(p_str)
-            if 100 <= price <= 130 and self.stars >= price:
-                gift = "هدية"; m = re.search(r'(?:هدية|Gift)\s*["\']?([\w\s]+)', text, re.I)
+            if 80 <= price <= 150 and self.stars >= price:
+                gift = "هدية"; m = re.search(r'(?:هدية|Gift|مقتني)\s*["\']?([\w\s]+)', text, re.I)
                 if m: gift = m.group(1).strip()
                 for row in event.reply_markup.rows:
                     for btn in row.buttons:
@@ -285,8 +279,8 @@ class FatimaBot:
         if cmd=="stats": await self.update_stats_msg(); await event.reply("✅")
         elif cmd=="stop": self.running=False; await event.reply("🛑")
         elif cmd=="start": self.running=True; await event.reply("✅")
-        elif cmd=="sniper_on": self.sniper_enabled=True; await event.reply("🎯")
-        elif cmd=="sniper_off": self.sniper_enabled=False; await event.reply("🎯")
+        elif cmd=="sniper_on": self.sniper_enabled=True; await event.reply("🎯 مفعل")
+        elif cmd=="sniper_off": self.sniper_enabled=False; await event.reply("🔴 معطل")
         elif cmd=="leavedead":
             c=0
             for cl in [self.c1, self.c2] if self.c2 else [self.c1]:
@@ -296,7 +290,8 @@ class FatimaBot:
                         m = await cl.get_messages(d.entity, limit=1)
                         if not m or not m[0].date: await cl(LeaveChannelRequest(d.entity)); c+=1
                     except: pass
-            self.stats['channels_left']+=c; await event.reply(f"🧹 {c}"); await self.update_stats_msg()
+            self.stats['channels_left']+=c; await event.reply(f"🧹 {c}")
+            await self.update_stats_msg()
         elif cmd=="panel":
             await event.respond("🔥 أوامر", buttons=[Button.inline(".stats",b"stats")])
 
@@ -356,7 +351,7 @@ class FatimaBot:
         await self.main_client.send_message('me', "👋 فاطمة الزهراء جاهزة\n.help للأوامر")
         await self.update_stats_msg()
         await self.c1(UpdateStatusRequest(offline=False))
-        logger.info("🚀 فاطمة (محصنة) انطلقت")
+        logger.info("🚀 فاطمة (نهائية) انطلقت")
         await self.c1.run_until_disconnected()
 
 if __name__ == "__main__":
