@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
-فاطمة الزهراء – الإصدار النهائي 100%
-نموذج Groq llama-3.3-70b-versatile | ردود احتياطية ذكية | جلسات حصرية
+فاطمة الزهراء – الإصدار الأسطوري النهائي (2026)
+نموذج Groq: llama-3.3-70b-versatile | شخصية بشرية 100%
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 """
 import os, asyncio, random, re, json, logging, time
@@ -16,22 +16,25 @@ from telethon.errors import AuthKeyDuplicatedError, FloodWaitError
 from groq import AsyncGroq
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("FatimaV100")
+logger = logging.getLogger("FatimaLegend")
 
-# ---------- الإعدادات ----------
+# ---------- الإعدادات (من أسرار GitHub) ----------
 API_ID_1 = int(os.environ["API_ID_1"]); API_HASH_1 = os.environ["API_HASH_1"]; SESSION_1 = os.environ["SESSION_1"]
 API_ID_2 = int(os.environ.get("API_ID_2", 0)); API_HASH_2 = os.environ.get("API_HASH_2", ""); SESSION_2 = os.environ.get("SESSION_2", "")
 ADMIN_ID = int(os.environ["ADMIN_ID"])
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
+# كلمات الصيد
 HUNT_KEYWORDS = ["مشاركة", "انضمام", "سحب", "دخول", "روليت", "دب", "هدية", "نجوم", "تعزيز",
                  "يلا", "سجل", "اضغط", "بسرعة", "التحق", "تأكيد", "شارك", "انقر"]
 DANGER_WORDS = ["أكثر نجوم", "من يضع", "تصويت بنجوم", "اكثر شخص يحط", "يحط يربح", "مزاد نجوم"]
 SAFE_REGEX = r'أول\s*(شخص|واحد|من)\s*(ي|يلي)?\s*(كتب|يكتب|قال|يقول|رد|يرد|علق|يعلق)\s*[({\[].*?[)}\]]'
+
+# شخصية البنت
 PERSONA_NAMES = ["فاطمة الزهراء", "لارا", "ملاك", "ليل", "سما", "روح", "فراشة", "نور"]
 PERSONA_BIOS = ["مغربية 🇲🇦 | 18 سنة | لاعبة كرة ⚽", "بنت بسيطة من المغرب", "مزاجي كرة وسهر 🌙"]
 
-STATS_MSG_ID = None
+STATS_MSG_ID = None  # رسالة الإحصائيات الحية في المحفوظات
 
 class FatimaBot:
     def __init__(self):
@@ -39,27 +42,28 @@ class FatimaBot:
         self.c2 = TelegramClient(StringSession(SESSION_2), API_ID_2, API_HASH_2) if SESSION_2 else None
         self.running = True
         self.stars = 0
-        self.sniper_enabled = False
+        self.sniper_enabled = False  # القناص (شراء الهدايا)
         self.last_persona_change = datetime.min
-        self.cache = set()
-        self.gift_log = []
+        self.cache = set()  # أزرار تم النقر عليها
+        self.gift_log = []  # سجل الهدايا المشتراة
         self.stats = {"wins":0, "stars":0, "gifts_bought":0, "gifts_converted":0,
                       "channels_left":0, "msgs_processed":0, "start":time.time()}
         self.main_client = None
-        self.conversations = {}
-        self.is_resting = False
+        self.conversations = {}  # ذاكرة لكل مستخدم {user_id: [msgs]}
+        self.is_resting = False  # فترة راحة
         self.ai = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
         self.ai_fail_count = 0
         self.ai_paused_until = None
 
-    async def iron_connect(self, client, name):
+    # ========== اتصال ==========
+    async def connect(self, client, name):
         try:
             await client.connect()
             if await client.is_user_authorized():
                 logger.info(f"✅ {name}")
                 return True
         except AuthKeyDuplicatedError:
-            logger.critical(f"🔑 {name} جلسة مكررة! لا تستخدم الحساب من مكان آخر.")
+            logger.critical(f"🔑 {name} الجلسة مكررة! لا تفتح الحساب من مكان آخر.")
         except Exception as e:
             logger.error(f"❌ {name}: {e}")
         return False
@@ -83,14 +87,16 @@ class FatimaBot:
             await asyncio.sleep(20 * 60)
             self.is_resting = False; logger.info("☀️ رجعت للعمل")
 
+    # ========== ذاكرة ==========
     def get_conv(self, uid):
         if uid not in self.conversations: self.conversations[uid] = []
         return self.conversations[uid]
 
     def add_conv(self, uid, role, text):
-        c = self.get_conv(uid); c.append({"role":role,"text":text})
+        c = self.get_conv(uid); c.append({"role": role, "text": text})
         if len(c) > 20: c.pop(0)
 
+    # ========== إحصائيات حية ==========
     async def update_stats_msg(self):
         global STATS_MSG_ID
         if not self.main_client: return
@@ -110,8 +116,8 @@ class FatimaBot:
                 sent = await self.main_client.send_message('me', msg); STATS_MSG_ID = sent.id
         except: pass
 
-    # ---------- معالجة القنوات والمجموعات (سريع) ----------
-    async def handle_public_message(self, event, client):
+    # ========== معالج القنوات (صيد سريع بدون AI) ==========
+    async def handle_public(self, event, client):
         text = event.raw_text or ""
         # تحويل الهدايا
         if event.reply_markup and any(w in text for w in ['هدية من','أضاف','الهدية']):
@@ -131,24 +137,28 @@ class FatimaBot:
             reply_text = reply.group(0).strip('(){}[]') if reply else "تم"
             try: await event.reply(reply_text)
             except: pass
-            if event.reply_markup: await self.hunt_buttons(event, client)
+            if event.reply_markup: await self.hunt(event, client)
             return
         if event.reply_markup and event.id not in self.cache:
             btn_text = "".join(b.text for r in event.reply_markup.rows for b in r.buttons)
             if any(k in (text + " " + btn_text).lower() for k in HUNT_KEYWORDS):
                 self.cache.add(event.id)
-                await self.auto_join(event, client)
+                await self.join(event, client)
                 await asyncio.sleep(random.uniform(1.5, 4))
-                await self.hunt_buttons(event, client)
+                await self.hunt(event, client)
                 return
-        await self.snipe_gifts(event, client)
+        await self.snipe(event, client)
 
-    # ---------- الرسائل الخاصة (AI) ----------
-    async def handle_private_message(self, event, client):
+    # ========== الرسائل الخاصة (AI) ==========
+    async def handle_private(self, event, client):
         if event.out: return
         text = event.raw_text or ""
         uid = event.sender_id
 
+        # لا ترد على البوتات (تتجنب التحدث مع البوتات الرسمية)
+        if event.sender and event.sender.bot: return
+
+        # هدايا النجوم
         if isinstance(event.message.action, types.MessageActionStarGift):
             if event.reply_markup:
                 for row in event.reply_markup.rows:
@@ -157,14 +167,14 @@ class FatimaBot:
                             await event.click(row.row_index, btn.column_index)
                             self.stats['gifts_converted'] += 1; self.stats['stars'] += random.randint(10,50)
                             await self.update_stats_msg()
-            thanks = random.choice(["يسلمووو ❤️","تسلم يالغالي 🌸","واااي شكراً 💫"])
+            thanks = random.choice(["يسلمووو ❤️","تسلم خويا 🌸","واااي شكراً 💫"])
             await asyncio.sleep(random.uniform(1,2))
             try: await event.reply(thanks)
             except: pass
             return
 
         self.add_conv(uid, "user", text)
-        reply_text = await self.smart_reply(text, uid, event)
+        reply_text = await self.reply_ai(text, uid, event)
         if reply_text:
             await asyncio.sleep(random.uniform(2,5))
             try: await client(ReadHistoryRequest(peer=event.chat_id, max_id=event.id))
@@ -172,34 +182,48 @@ class FatimaBot:
             await asyncio.sleep(random.uniform(0.5,1.5))
             async with client.action(event.chat_id, 'typing'):
                 await asyncio.sleep(random.uniform(0.8,2))
-            try: await event.reply(reply_text)
+            try:
+                await event.reply(reply_text)
+                self.add_conv(uid, "assistant", reply_text)
             except: pass
 
-    async def smart_reply(self, user_text, uid, event):
+    # ========== الذكاء الاصطناعي للرد ==========
+    async def reply_ai(self, user_text, uid, event):
         if self.ai_paused_until and datetime.now() < self.ai_paused_until:
-            return self._fallback_reply(user_text)
+            return self.fallback(user_text)
         if self.ai_fail_count >= 3:
             self.ai_paused_until = datetime.now() + timedelta(minutes=5)
             self.ai_fail_count = 0
-            logger.warning("⏳ إيقاف AI 5 دقائق")
-            return self._fallback_reply(user_text)
+            logger.warning("⏳ AI متوقف 5 دقائق")
+            return self.fallback(user_text)
 
         try:
             sender = await event.get_sender()
-            sender_name = sender.first_name or "صاحبي"
+            sender_name = sender.first_name or "خويا"
             conv = self.get_conv(uid)
             history = "\n".join([f"{'هي' if m['role']=='assistant' else sender_name}: {m['text']}" for m in conv[-5:]])
+
             system_prompt = (
-                "أنتِ 'فاطمة الزهراء'، بنت مغربية 18 سنة، لاعبة كرة. "
-                "شخصيتك: لطيفة، خجولة شوي، تتكلمين العامية حسب الشخص. "
-                "ردودك قصيرة (3-12 كلمة). لا تكرري نفس الكلام. لا تقولي 'غالي' مع الذكور. "
-                "كوني طبيعية جداً. ردي بصيغة JSON: {\"reply_text\": \"...\"}"
+                "أنتِ 'فاطمة الزهراء'، بنت من المغرب عمرك 18 سنة. تحبين كرة القدم وشخصيتك لطيفة ومتواضعة. "
+                "تتحدثين العامية حسب لهجة الشخص اللي يكلمك: مغربية، تونسية، عراقية، سورية، مصرية... "
+                "ردودك قصيرة جداً (3-12 كلمة)، لا تكررين نفس الكلام أبداً. "
+                "لا تقولين 'غالي' مع الذكور، استخدمي 'خويا' أو 'صاحبي'. "
+                "إذا سألك 'كيفاش' (مغربية) ردي 'لباس الحمد لله'. "
+                "إذا سألك 'شنو إسمك' ردي 'فاطمة الزهراء، من المغرب'. "
+                "إذا سألك 'هل أنت ذكاء اصطناعي' أو 'بوت' ردي 'لا حبيبي أنا بنت حقيقية 😅'. "
+                "لا تخترعي أسماء، نادي الشخص باسمه إذا عرفتي. "
+                "كوني طبيعية جداً، ولا تظهري أبداً أنك برنامج. "
+                "لا تردي أبداً على البوتات. "
+                "ردي بصيغة JSON: {\"reply_text\": \"...\"}"
             )
+            prompt = f"اسم المستخدم: {sender_name}\nآخر محادثة:\n{history}\n\nالرسالة الجديدة:\n{user_text}"
+
             response = await self.ai.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role":"system","content":system_prompt},
-                         {"role":"user","content":f"تاريخ:\n{history}\n\nالرسالة:\n{user_text}"}],
-                temperature=0.9, max_tokens=50,
+                         {"role":"user","content":prompt}],
+                temperature=0.9,
+                max_tokens=50,
                 response_format={"type":"json_object"}
             )
             data = json.loads(response.choices[0].message.content)
@@ -213,27 +237,55 @@ class FatimaBot:
             self.ai_fail_count += 1
             if self.ai_fail_count >= 3:
                 self.ai_paused_until = datetime.now() + timedelta(minutes=5)
-            return self._fallback_reply(user_text)
+            return self.fallback(user_text)
 
-    def _fallback_reply(self, text):
-        """ردود احتياطية ذكية ومتنوعة"""
+    def fallback(self, text):
+        """ردود احتياطية طبيعية جداً حسب اللهجة"""
         if any(w in text for w in ['مرحبا','سلام','اهلا','مساء']):
             return random.choice(["أهلاً وسهلاً 🌸","هلا والله","مراحب","مساء النور"])
         if 'كيفك' in text or 'شخبارك' in text:
-            return random.choice(["الحمد لله بخير","تمام شكراً، ونتا؟","بخير الحمدلله"])
-        if 'ش ع ت' in text or 'شنو' in text:
+            return random.choice(["الحمد لله بخير","تمام شكراً ونتا؟","بخير الحمدلله"])
+        if 'شنو' in text or 'ش ع ت' in text:
             return random.choice(["والو","مفهمتش واش قصدك؟","واش معنى؟"])
-        return random.choice(["🌸","❤️","هلا","أهلاً","كيف داير؟"])
+        return random.choice(["🌸","هلا","أهلاً","كيف داير؟"])
 
-    # ---------- القناص (يشتري هدايا 80-150 نجمة) ----------
-    async def snipe_gifts(self, event, client):
+    # ========== الصيد والقناص ==========
+    async def hunt(self, event, client):
+        if not event.reply_markup: return
+        for r,row in enumerate(event.reply_markup.rows):
+            for b,btn in enumerate(row.buttons):
+                if any(k in btn.text for k in HUNT_KEYWORDS) or "مشاركة" in btn.text:
+                    try:
+                        await event.click(r,b)
+                        self.stats['wins'] += 1
+                        self.stats['stars'] += random.randint(1,5)
+                        if not self.sniper_enabled and self.stars >= 100:
+                            self.sniper_enabled = True
+                        await self.update_stats_msg()
+                        return
+                    except FloodWaitError as e: await asyncio.sleep(e.seconds+1)
+                    except: pass
+
+    async def join(self, event, client):
+        links = set()
+        if event.entities:
+            for e in event.entities:
+                if hasattr(e,'url') and 't.me' in (e.url or ''): links.add(e.url)
+        links.update(re.findall(r't\.me/[\w\d_]+|@[\w\d_]+', event.raw_text))
+        for l in links:
+            name=l.split('/')[-1].replace('@','')
+            try: await client(JoinChannelRequest(name))
+            except: pass
+
+    async def snipe(self, event, client):
         if not self.sniper_enabled or not event.reply_markup: return
         text = event.raw_text or ""
         prices = re.findall(r'(?:سعر|ثمن|بيع|price|قيمة)\s*[:#]?\s*(\d{2,})', text, re.I)
         for p_str in prices:
             price = int(p_str)
             if 80 <= price <= 150 and self.stars >= price:
-                gift = "هدية"; m = re.search(r'(?:هدية|Gift|مقتني)\s*["\']?([\w\s]+)', text, re.I)
+                gift = "هدية"
+                m = re.search(r'(?:هدية|Gift|مقتني)\s*["\']?([\w\s]+)', text, re.I)
                 if m: gift = m.group(1).strip()
                 for row in event.reply_markup.rows:
                     for btn in row.buttons:
@@ -251,32 +303,10 @@ class FatimaBot:
                             return True
         return False
 
-    async def hunt_buttons(self, event, client):
-        if not event.reply_markup: return
-        for r,row in enumerate(event.reply_markup.rows):
-            for b,btn in enumerate(row.buttons):
-                if any(k in btn.text for k in HUNT_KEYWORDS) or "مشاركة" in btn.text:
-                    try:
-                        await event.click(r,b); self.stats['wins'] += 1; self.stats['stars'] += random.randint(1,5)
-                        if not self.sniper_enabled and self.stars >= 100: self.sniper_enabled = True
-                        await self.update_stats_msg(); return
-                    except FloodWaitError as e: await asyncio.sleep(e.seconds+1)
-                    except: pass
-
-    async def auto_join(self, event, client):
-        links = set()
-        if event.entities:
-            for e in event.entities:
-                if hasattr(e,'url') and 't.me' in (e.url or ''): links.add(e.url)
-        links.update(re.findall(r't\.me/[\w\d_]+|@[\w\d_]+', event.raw_text))
-        for l in links:
-            name=l.split('/')[-1].replace('@','')
-            try: await client(JoinChannelRequest(name))
-            except: pass
-
+    # ========== أوامر ==========
     async def handle_command(self, event, parts):
         cmd = parts[0][1:].lower()
-        if cmd=="stats": await self.update_stats_msg(); await event.reply("✅")
+        if cmd=="stats": await self.update_stats_msg(); await event.reply("✅ تم")
         elif cmd=="stop": self.running=False; await event.reply("🛑")
         elif cmd=="start": self.running=True; await event.reply("✅")
         elif cmd=="sniper_on": self.sniper_enabled=True; await event.reply("🎯 مفعل")
@@ -293,36 +323,39 @@ class FatimaBot:
             self.stats['channels_left']+=c; await event.reply(f"🧹 {c}")
             await self.update_stats_msg()
         elif cmd=="panel":
-            await event.respond("🔥 أوامر", buttons=[Button.inline(".stats",b"stats")])
+            await event.respond("🔥 أوامر فاطمة", buttons=[Button.inline(".stats",b"stats")])
 
+    # ========== التشغيل ==========
     async def main(self):
-        if not await self.iron_connect(self.c1, "ح1"): return
+        if not await self.connect(self.c1, "ح1"): return
         self.main_client = self.c1
         if self.stars >= 100: self.sniper_enabled = True
-        if self.c2 and not await self.iron_connect(self.c2, "ح2"): self.c2 = None
+
+        if self.c2 and not await self.connect(self.c2, "ح2"): self.c2 = None
 
         @self.c1.on(events.NewMessage)
         async def h1(e):
             if e.sender_id==ADMIN_ID and e.raw_text.startswith("."):
                 await self.handle_command(e, e.raw_text.split())
             elif e.is_private:
-                await self.handle_private_message(e, self.c1)
+                await self.handle_private(e, self.c1)
             else:
                 if self.running and not self.is_resting:
                     self.stats['msgs_processed'] += 1
-                    await self.handle_public_message(e, self.c1)
+                    await self.handle_public(e, self.c1)
                     if self.stats['msgs_processed'] % 5 == 0: await self.update_stats_msg()
 
         if self.c2:
             @self.c2.on(events.NewMessage)
             async def h2(e):
-                if e.is_private: await self.handle_private_message(e, self.c2)
-                elif self.running and not self.is_resting: await self.handle_public_message(e, self.c2)
+                if e.is_private: await self.handle_private(e, self.c2)
+                elif self.running and not self.is_resting: await self.handle_public(e, self.c2)
 
         asyncio.create_task(self.keep_alive(self.c1,"ح1"))
         if self.c2: asyncio.create_task(self.keep_alive(self.c2,"ح2"))
         asyncio.create_task(self.rest_schedule())
 
+        # تنظيف القنوات الميتة
         async def periodic():
             while self.running:
                 await asyncio.sleep(14400)
@@ -338,6 +371,7 @@ class FatimaBot:
                 await self.update_stats_msg()
         asyncio.create_task(periodic())
 
+        # تغيير شخصية الحساب الثاني
         async def persona():
             while self.running:
                 await asyncio.sleep(3600)
@@ -351,7 +385,7 @@ class FatimaBot:
         await self.main_client.send_message('me', "👋 فاطمة الزهراء جاهزة\n.help للأوامر")
         await self.update_stats_msg()
         await self.c1(UpdateStatusRequest(offline=False))
-        logger.info("🚀 فاطمة (نهائية) انطلقت")
+        logger.info("🚀 فاطمة الأسطورية انطلقت")
         await self.c1.run_until_disconnected()
 
 if __name__ == "__main__":
