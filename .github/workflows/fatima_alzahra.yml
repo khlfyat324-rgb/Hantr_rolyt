@@ -1,8 +1,9 @@
-name: فاطمة الزهراء 24/7
+name: فاطمة الزهراء (Ollama)
+
 on:
-  schedule:
-    - cron: '0 */5 * * *'
+  schedule: [{cron: '0 */5 * * *'}]
   workflow_dispatch:
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -10,9 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install telethon openai
+        with: {python-version: '3.11'}
+
+      - name: تثبيت Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          ollama pull llama3:8b
+
+      - name: تثبيت المكتبات
+        run: pip install -r requirements.txt
+
       - name: تشغيل فاطمة الزهراء
         env:
           API_ID_1: ${{ secrets.API_ID_1 }}
@@ -22,5 +32,5 @@ jobs:
           API_HASH_2: ${{ secrets.API_HASH_2 }}
           SESSION_2: ${{ secrets.SESSION_2 }}
           ADMIN_ID: ${{ secrets.ADMIN_ID }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          OLLAMA_MODEL: llama3:8b
         run: python fatima_alzahra.py
