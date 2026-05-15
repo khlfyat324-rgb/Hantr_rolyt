@@ -1,4 +1,4 @@
-name: فاطمة الزهراء (حسابين)
+name: فاطمة الزهراء (النسخة البشرية)
 on:
   schedule: [{cron: '0 */5 * * *'}]
   workflow_dispatch:
@@ -16,9 +16,9 @@ jobs:
           ollama serve &
           sleep 10
           ollama pull llama3:8b
-      - name: مكتبات
+      - name: تثبيت المكتبات
         run: pip install -r requirements.txt
-      - name: تشغيل
+      - name: تشغيل فاطمة الزهراء
         env:
           API_ID_1: ${{ secrets.API_ID_1 }}
           API_HASH_1: ${{ secrets.API_HASH_1 }}
