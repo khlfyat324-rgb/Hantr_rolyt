@@ -1,4 +1,4 @@
-name: فاطمة الزهراء (Groq)
+name: فاطمة الزهراء الأسطورية
 on:
   schedule: [{cron: '0 */5 * * *'}]
   workflow_dispatch:
