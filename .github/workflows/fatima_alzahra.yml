@@ -1,19 +1,45 @@
-name: Omega Gift Sniper 24/7
+name: Omega Gift Sniper 24/7 (Multi-Module)
+
 on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
+
 jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Your Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Autobuy Project (Dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: 'touchmeangel/autobuy'
+          path: 'autobuy_module' # جلب المشروع في مجلد فرعي للاستفادة من دواله
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - name: تشغيل Omega Gift Sniper
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install telethon requests pillow qrcode cryptography
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f autobuy_module/requirements.txt ]; then pip install -r autobuy_module/requirements.txt; fi
+
+      - name: Move Core Files
+        run: |
+          # نقل ملفات التعامل مع التليجرام من المشروع الآخر لتصبح قابلة للاستدعاء مباشرة
+          cp autobuy_module/telegram.py ./autobuy_telegram.py
+          cp autobuy_module/config.py ./autobuy_config.py
+          ls -la # للتأكد من بنية الملفات في بيئة التشغيل
+
+      - name: تشغيل Omega Gift Sniper + الروليت
         env:
           API_ID_1: ${{ secrets.API_ID_1 }}
           API_HASH_1: ${{ secrets.API_HASH_1 }}
@@ -22,4 +48,6 @@ jobs:
           API_HASH_2: ${{ secrets.API_HASH_2 }}
           SESSION_2: ${{ secrets.SESSION_2 }}
           ADMIN_ID: ${{ secrets.ADMIN_ID }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python fatima_alzahra.py
+        
