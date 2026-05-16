@@ -1,17 +1,19 @@
-name: فاطمة الزهراء الأسطورية
+name: Omega Gift Sniper 24/7
 on:
-  schedule: [{cron: '0 */5 * * *'}]
+  schedule:
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
+        with:
+          python-version: '3.11'
       - run: pip install -r requirements.txt
-      - name: تشغيل
+      - name: تشغيل Omega Gift Sniper
         env:
           API_ID_1: ${{ secrets.API_ID_1 }}
           API_HASH_1: ${{ secrets.API_HASH_1 }}
@@ -20,5 +22,4 @@ jobs:
           API_HASH_2: ${{ secrets.API_HASH_2 }}
           SESSION_2: ${{ secrets.SESSION_2 }}
           ADMIN_ID: ${{ secrets.ADMIN_ID }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python fatima_alzahra.py
