@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
-فاطمة الزهراء – الإصدار الأسطوري النهائي (2026)
-نموذج Groq: llama-3.3-70b-versatile | شخصية بشرية 100%
+فاطمة الزهراء – الإصدار الأسطوري النهائي (Fix Final)
+نموذج Groq: llama-3.3-70b-versatile | ردود بشرية 100% | انتظار ذكي
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 """
 import os, asyncio, random, re, json, logging, time
@@ -16,25 +16,22 @@ from telethon.errors import AuthKeyDuplicatedError, FloodWaitError
 from groq import AsyncGroq
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("FatimaLegend")
+logger = logging.getLogger("FatimaFinal")
 
-# ---------- الإعدادات (من أسرار GitHub) ----------
+# ---------- الإعدادات (أسرار) ----------
 API_ID_1 = int(os.environ["API_ID_1"]); API_HASH_1 = os.environ["API_HASH_1"]; SESSION_1 = os.environ["SESSION_1"]
 API_ID_2 = int(os.environ.get("API_ID_2", 0)); API_HASH_2 = os.environ.get("API_HASH_2", ""); SESSION_2 = os.environ.get("SESSION_2", "")
 ADMIN_ID = int(os.environ["ADMIN_ID"])
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-# كلمات الصيد
 HUNT_KEYWORDS = ["مشاركة", "انضمام", "سحب", "دخول", "روليت", "دب", "هدية", "نجوم", "تعزيز",
                  "يلا", "سجل", "اضغط", "بسرعة", "التحق", "تأكيد", "شارك", "انقر"]
 DANGER_WORDS = ["أكثر نجوم", "من يضع", "تصويت بنجوم", "اكثر شخص يحط", "يحط يربح", "مزاد نجوم"]
 SAFE_REGEX = r'أول\s*(شخص|واحد|من)\s*(ي|يلي)?\s*(كتب|يكتب|قال|يقول|رد|يرد|علق|يعلق)\s*[({\[].*?[)}\]]'
-
-# شخصية البنت
 PERSONA_NAMES = ["فاطمة الزهراء", "لارا", "ملاك", "ليل", "سما", "روح", "فراشة", "نور"]
 PERSONA_BIOS = ["مغربية 🇲🇦 | 18 سنة | لاعبة كرة ⚽", "بنت بسيطة من المغرب", "مزاجي كرة وسهر 🌙"]
 
-STATS_MSG_ID = None  # رسالة الإحصائيات الحية في المحفوظات
+STATS_MSG_ID = None
 
 class FatimaBot:
     def __init__(self):
@@ -42,15 +39,16 @@ class FatimaBot:
         self.c2 = TelegramClient(StringSession(SESSION_2), API_ID_2, API_HASH_2) if SESSION_2 else None
         self.running = True
         self.stars = 0
-        self.sniper_enabled = False  # القناص (شراء الهدايا)
+        self.sniper_enabled = False
         self.last_persona_change = datetime.min
-        self.cache = set()  # أزرار تم النقر عليها
-        self.gift_log = []  # سجل الهدايا المشتراة
+        self.cache = set()
+        self.gift_log = []
         self.stats = {"wins":0, "stars":0, "gifts_bought":0, "gifts_converted":0,
                       "channels_left":0, "msgs_processed":0, "start":time.time()}
         self.main_client = None
-        self.conversations = {}  # ذاكرة لكل مستخدم {user_id: [msgs]}
-        self.is_resting = False  # فترة راحة
+        self.conversations = {}          # {user_id: [msgs]}
+        self.pending_timers = {}         # {user_id: asyncio.Task} لتأخير الرد
+        self.is_resting = False
         self.ai = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
         self.ai_fail_count = 0
         self.ai_paused_until = None
@@ -87,13 +85,15 @@ class FatimaBot:
             await asyncio.sleep(20 * 60)
             self.is_resting = False; logger.info("☀️ رجعت للعمل")
 
-    # ========== ذاكرة ==========
+    # ========== ذاكرة المحادثات ==========
     def get_conv(self, uid):
-        if uid not in self.conversations: self.conversations[uid] = []
+        if uid not in self.conversations:
+            self.conversations[uid] = []
         return self.conversations[uid]
 
     def add_conv(self, uid, role, text):
-        c = self.get_conv(uid); c.append({"role": role, "text": text})
+        c = self.get_conv(uid)
+        c.append({"role": role, "text": text})
         if len(c) > 20: c.pop(0)
 
     # ========== إحصائيات حية ==========
@@ -113,10 +113,11 @@ class FatimaBot:
         try:
             if STATS_MSG_ID: await self.main_client.edit_message('me', STATS_MSG_ID, msg)
             else:
-                sent = await self.main_client.send_message('me', msg); STATS_MSG_ID = sent.id
+                sent = await self.main_client.send_message('me', msg)
+                STATS_MSG_ID = sent.id
         except: pass
 
-    # ========== معالج القنوات (صيد سريع بدون AI) ==========
+    # ========== معالج القنوات (سريع) ==========
     async def handle_public(self, event, client):
         text = event.raw_text or ""
         # تحويل الهدايا
@@ -125,7 +126,8 @@ class FatimaBot:
                 for btn in row.buttons:
                     if any(k in btn.text for k in ['تحويل','نجمة','convert','stars']):
                         await event.click(row.row_index, btn.column_index)
-                        self.stats['gifts_converted'] += 1; self.stats['stars'] += random.randint(10,50)
+                        self.stats['gifts_converted'] += 1
+                        self.stats['stars'] += random.randint(10,50)
                         await self.update_stats_msg()
                         try: await client(DeleteHistoryRequest(peer=event.chat_id, max_id=0, just_clear=True))
                         except: pass
@@ -149,14 +151,12 @@ class FatimaBot:
                 return
         await self.snipe(event, client)
 
-    # ========== الرسائل الخاصة (AI) ==========
+    # ========== الرسائل الخاصة (مع انتظار ذكي) ==========
     async def handle_private(self, event, client):
         if event.out: return
-        text = event.raw_text or ""
-        uid = event.sender_id
+        if event.sender and event.sender.bot: return  # تجاهل البوتات
 
-        # لا ترد على البوتات (تتجنب التحدث مع البوتات الرسمية)
-        if event.sender and event.sender.bot: return
+        uid = event.sender_id
 
         # هدايا النجوم
         if isinstance(event.message.action, types.MessageActionStarGift):
@@ -165,7 +165,8 @@ class FatimaBot:
                     for btn in row.buttons:
                         if any(k in btn.text for k in ['تحويل','نجمة','convert']):
                             await event.click(row.row_index, btn.column_index)
-                            self.stats['gifts_converted'] += 1; self.stats['stars'] += random.randint(10,50)
+                            self.stats['gifts_converted'] += 1
+                            self.stats['stars'] += random.randint(10,50)
                             await self.update_stats_msg()
             thanks = random.choice(["يسلمووو ❤️","تسلم خويا 🌸","واااي شكراً 💫"])
             await asyncio.sleep(random.uniform(1,2))
@@ -173,81 +174,89 @@ class FatimaBot:
             except: pass
             return
 
+        # إضافة الرسالة إلى الذاكرة
+        text = event.raw_text or ""
         self.add_conv(uid, "user", text)
-        reply_text = await self.reply_ai(text, uid, event)
-        if reply_text:
-            await asyncio.sleep(random.uniform(2,5))
-            try: await client(ReadHistoryRequest(peer=event.chat_id, max_id=event.id))
-            except: pass
-            await asyncio.sleep(random.uniform(0.5,1.5))
-            async with client.action(event.chat_id, 'typing'):
-                await asyncio.sleep(random.uniform(0.8,2))
-            try:
-                await event.reply(reply_text)
-                self.add_conv(uid, "assistant", reply_text)
-            except: pass
 
-    # ========== الذكاء الاصطناعي للرد ==========
-    async def reply_ai(self, user_text, uid, event):
-        if self.ai_paused_until and datetime.now() < self.ai_paused_until:
-            return self.fallback(user_text)
-        if self.ai_fail_count >= 3:
-            self.ai_paused_until = datetime.now() + timedelta(minutes=5)
-            self.ai_fail_count = 0
-            logger.warning("⏳ AI متوقف 5 دقائق")
-            return self.fallback(user_text)
+        # إلغاء أي مؤقت سابق لهذا المستخدم (سننتظر المزيد من الرسائل)
+        if uid in self.pending_timers:
+            self.pending_timers[uid].cancel()
+            logger.info(f"⏳ إلغاء مؤقت سابق للمستخدم {uid}، في انتظار رسائل إضافية")
 
-        try:
-            sender = await event.get_sender()
-            sender_name = sender.first_name or "خويا"
+        # إنشاء مؤقت جديد للرد بعد فترة صمت (4-7 ثوانٍ)
+        async def delayed_reply():
+            await asyncio.sleep(random.uniform(4, 7))
+            # حان وقت الرد، نأخذ كل الرسائل المتراكمة من هذا المستخدم
             conv = self.get_conv(uid)
-            history = "\n".join([f"{'هي' if m['role']=='assistant' else sender_name}: {m['text']}" for m in conv[-5:]])
+            # نعالج فقط الرسائل الجديدة (غير المقروءة بعد) - لكننا سنعالج كل شيء معاً
+            # نرسل رد واحد بناءً على مجمل المحادثة
+            reply = await self.generate_reply(uid, event)
+            if reply:
+                await asyncio.sleep(random.uniform(1, 2))
+                try: await client(ReadHistoryRequest(peer=event.chat_id, max_id=event.id))
+                except: pass
+                await asyncio.sleep(random.uniform(0.5, 1.5))
+                async with client.action(event.chat_id, 'typing'):
+                    await asyncio.sleep(random.uniform(0.8, 2))
+                try:
+                    await client.send_message(event.chat_id, reply)
+                    self.add_conv(uid, "assistant", reply)
+                except: pass
+            # تنظيف المؤقت
+            if uid in self.pending_timers:
+                del self.pending_timers[uid]
 
-            system_prompt = (
-                "أنتِ 'فاطمة الزهراء'، بنت من المغرب عمرك 18 سنة. تحبين كرة القدم وشخصيتك لطيفة ومتواضعة. "
-                "تتحدثين العامية حسب لهجة الشخص اللي يكلمك: مغربية، تونسية، عراقية، سورية، مصرية... "
-                "ردودك قصيرة جداً (3-12 كلمة)، لا تكررين نفس الكلام أبداً. "
-                "لا تقولين 'غالي' مع الذكور، استخدمي 'خويا' أو 'صاحبي'. "
-                "إذا سألك 'كيفاش' (مغربية) ردي 'لباس الحمد لله'. "
-                "إذا سألك 'شنو إسمك' ردي 'فاطمة الزهراء، من المغرب'. "
-                "إذا سألك 'هل أنت ذكاء اصطناعي' أو 'بوت' ردي 'لا حبيبي أنا بنت حقيقية 😅'. "
-                "لا تخترعي أسماء، نادي الشخص باسمه إذا عرفتي. "
-                "كوني طبيعية جداً، ولا تظهري أبداً أنك برنامج. "
-                "لا تردي أبداً على البوتات. "
-                "ردي بصيغة JSON: {\"reply_text\": \"...\"}"
-            )
-            prompt = f"اسم المستخدم: {sender_name}\nآخر محادثة:\n{history}\n\nالرسالة الجديدة:\n{user_text}"
+        task = asyncio.create_task(delayed_reply())
+        self.pending_timers[uid] = task
 
-            response = await self.ai.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role":"system","content":system_prompt},
-                         {"role":"user","content":prompt}],
-                temperature=0.9,
-                max_tokens=50,
-                response_format={"type":"json_object"}
-            )
-            data = json.loads(response.choices[0].message.content)
-            reply = data.get("reply_text")
-            if not reply: raise ValueError("empty")
-            self.add_conv(uid, "assistant", reply)
-            self.ai_fail_count = 0
-            return reply
-        except Exception as e:
-            logger.error(f"Groq فشل ({self.ai_fail_count+1}): {e}")
-            self.ai_fail_count += 1
-            if self.ai_fail_count >= 3:
-                self.ai_paused_until = datetime.now() + timedelta(minutes=5)
-            return self.fallback(user_text)
+    async def generate_reply(self, uid, event):
+        """توليد رد واحد بناءً على المحادثة الكاملة مع هذا المستخدم"""
+        # استخدام AI إذا متاح، وإلا ردود محلية
+        if self.ai and (not self.ai_paused_until or datetime.now() >= self.ai_paused_until) and self.ai_fail_count < 3:
+            try:
+                sender = await event.get_sender()
+                sender_name = sender.first_name or "خويا"
+                conv = self.get_conv(uid)
+                # بناء تاريخ المحادثة
+                history = "\n".join([f"{'هي' if m['role']=='assistant' else sender_name}: {m['text']}" for m in conv[-10:]])
+                system_prompt = (
+                    "أنتِ 'فاطمة الزهراء'، بنت من المغرب عمرك 18 سنة. لاعبة كرة، شخصية لطيفة. "
+                    "تتحدثين بالعامية المناسبة للشخص (مغربية، مصرية، خليجية...). "
+                    "ردودك قصيرة (3-12 كلمة). لا تكررين نفس الكلام. لا تقولين 'غالي' للذكور. "
+                    "إذا قال 'مرحبا' ردي 'أهلاً'. إذا قال 'كيفاش' ردي 'لباس الحمد لله'. "
+                    "لا تخبرين أحداً أنك ذكاء اصطناعي. ردي ب JSON: {\"reply_text\": \"...\"}"
+                )
+                prompt = f"اسم المستخدم: {sender_name}\nآخر المحادثة:\n{history}\n\nاكتبي رداً واحداً مناسباً لكل الرسائل السابقة."
+                response = await self.ai.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role":"system","content":system_prompt},
+                             {"role":"user","content":prompt}],
+                    temperature=0.9, max_tokens=50,
+                    response_format={"type":"json_object"}
+                )
+                data = json.loads(response.choices[0].message.content)
+                reply = data.get("reply_text")
+                if reply:
+                    self.ai_fail_count = 0
+                    return reply
+            except Exception as e:
+                logger.error(f"AI فشل: {e}")
+                self.ai_fail_count += 1
+                if self.ai_fail_count >= 3:
+                    self.ai_paused_until = datetime.now() + timedelta(minutes=5)
+        # رد احتياطي
+        return self.fallback_reply(uid)
 
-    def fallback(self, text):
-        """ردود احتياطية طبيعية جداً حسب اللهجة"""
-        if any(w in text for w in ['مرحبا','سلام','اهلا','مساء']):
-            return random.choice(["أهلاً وسهلاً 🌸","هلا والله","مراحب","مساء النور"])
-        if 'كيفك' in text or 'شخبارك' in text:
-            return random.choice(["الحمد لله بخير","تمام شكراً ونتا؟","بخير الحمدلله"])
-        if 'شنو' in text or 'ش ع ت' in text:
-            return random.choice(["والو","مفهمتش واش قصدك؟","واش معنى؟"])
-        return random.choice(["🌸","هلا","أهلاً","كيف داير؟"])
+    def fallback_reply(self, uid):
+        """رد محلي سريع يعتمد على آخر رسالة فقط"""
+        conv = self.get_conv(uid)
+        if not conv: return "أهلاً 🌸"
+        last_msg = conv[-1]['text'].lower()
+        if any(w in last_msg for w in ['مرحبا','سلام','اهلا']):
+            return random.choice(["أهلاً وسهلاً 🌸","هلا والله","مراحب"])
+        if 'كيفك' in last_msg or 'شخبارك' in last_msg:
+            return random.choice(["الحمد لله بخير","تمام شكراً ونتا؟"])
+        return random.choice(["🌸","هلا","أهلاً"])
 
     # ========== الصيد والقناص ==========
     async def hunt(self, event, client):
@@ -325,7 +334,7 @@ class FatimaBot:
         elif cmd=="panel":
             await event.respond("🔥 أوامر فاطمة", buttons=[Button.inline(".stats",b"stats")])
 
-    # ========== التشغيل ==========
+    # ========== تشغيل ==========
     async def main(self):
         if not await self.connect(self.c1, "ح1"): return
         self.main_client = self.c1
@@ -355,7 +364,7 @@ class FatimaBot:
         if self.c2: asyncio.create_task(self.keep_alive(self.c2,"ح2"))
         asyncio.create_task(self.rest_schedule())
 
-        # تنظيف القنوات الميتة
+        # تنظيف القنوات
         async def periodic():
             while self.running:
                 await asyncio.sleep(14400)
@@ -371,7 +380,7 @@ class FatimaBot:
                 await self.update_stats_msg()
         asyncio.create_task(periodic())
 
-        # تغيير شخصية الحساب الثاني
+        # شخصية الحساب الثاني
         async def persona():
             while self.running:
                 await asyncio.sleep(3600)
