@@ -28,11 +28,11 @@ SESSION_2 = os.environ.get("SESSION_2", "")
 
 ADMIN_ID = int(os.environ["ADMIN_ID"])
 
-# ---------- تحديث الميزانية والنطاق الجديد ----------
+# ---------- ميزانية ونطاق أسعار الهدايا ----------
 GIFT_PRICE_MIN = 200
 GIFT_PRICE_MAX = 250
 
-# توسيع كلمات الروليت والمسابقات بشكل ضخم جداً
+# كلمات الروليت والمسابقات الموسعة
 HUNT_KEYWORDS = [
     "مشاركة", "انضمام", "سحب", "دخول", "روليت", "هدية", "نجوم", "اضغط", "بسرعة", 
     "شارك", "انقر", "اضغط للانضمام", "انضم الآن", "سجل هنا", "التحق", "تأكيد", 
@@ -40,13 +40,13 @@ HUNT_KEYWORDS = [
 ]
 DANGER_WORDS = ["أكثر نجوم", "من يضع", "تصويت بنجوم", "اكثر شخص يحط", "مزاد"]
 
-# معرفات أسواق الهدايا (ضع معرفات القنوات التي تراقبها هنا بدون @)
+# قنوات وأسواق الهدايا للمراقبة المكثفة
 GIFT_MARKETS = ["Koda_7", "tonnel_network_bot", "AutoGiftsBot", "GiftHub_bot"]
 
+# أسماء وهوية التخفي للحساب الثاني
 PERSONA_NAMES = ["فاطمة الزهراء", "لارا", "ملاك", "سما"]
 PERSONA_BIOS = ["مغربية 🇲🇦 | 18 سنة", "بنت بسيطة من المغرب"]
 
-# معرفات الرسائل للوحة التحكم والبث الحي
 PANEL_MSG_ID = None
 LIVE_LOG_MSG_ID = None
 
@@ -59,10 +59,10 @@ class OmegaMultiSystem:
         self.sniper_enabled = True
         self.is_resting = False
         self.stats = {"wins": 0, "gifts_bought": 0, "msgs_processed": 0, "start_time": time.time()}
-        self.last_scans = [] # للاحتفاظ بآخر عمليات فحص حية
+        self.last_scans = []
 
     async def update_live_panel(self):
-        """تحديث لوحة الإحصائيات وبث نتائج الفحص الحي في رسائل المدير"""
+        """تحديث لوحة التحكم وبث الفحص الحي مباشرة في رسائل المدير"""
         global PANEL_MSG_ID, LIVE_LOG_MSG_ID
         if not self.running:
             return
@@ -70,11 +70,10 @@ class OmegaMultiSystem:
         uptime = str(timedelta(seconds=int(time.time() - self.stats['start_time'])))
         status = "😴 راحة مؤقتة" if self.is_resting else "🟢 نشط ويصطاد"
         
-        # 1. صياغة لوحة التحكم
         panel_text = (
             f"🔥 **لوحة تحكم Omega Sniper الحية**\n"
             f"-----------------------------------\n"
-            f"Status: {status}\n"
+            f"الحالة الحالية: {status}\n"
             f"⏱️ مدة العمل المستمر: {uptime}\n"
             f"🏆 فوز روليت ومسابقات: {self.stats['wins']}\n"
             f"💎 هدايا تم صيدها بنجاح: {self.stats['gifts_bought']}\n"
@@ -83,44 +82,37 @@ class OmegaMultiSystem:
             f"⚙️ حالة القناص الحالي: {'🟢 يعمل بسرعة البرق' if self.sniper_enabled else '🔴 معطل مؤقتاً'}"
         )
         
-        # أزرار التحكم اللحظية
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("🎯 تفعيل القناص", callback_data="toggle_sniper_on"),
                 InlineKeyboardButton("🔴 إيقاف القناص", callback_data="toggle_sniper_off")
             ],
-            [
-                InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="refresh_stats")
-            ]
+            [InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="refresh_stats")]
         ])
 
-        # 2. صياغة بث الفحص الحي (Live Log)
         log_text = "🔍 **نتائج الفحص الحي للقناص (Live Scan):**\n-----------------------------------\n"
         if not self.last_scans:
             log_text += "⏳ بانتظار تدفق الرسائل من الأسواق..."
         else:
-            for scan in self.last_scans[-5:]: # إظهار آخر 5 عمليات فحص فقط لمنع التضخم
+            for scan in self.last_scans[-5:]:
                 log_text += f"{scan}\n"
 
         try:
-            # تحديث أو إرسال لوحة التحكم
             if PANEL_MSG_ID:
                 await self.app1.edit_message_text(ADMIN_ID, PANEL_MSG_ID, panel_text, reply_markup=keyboard)
             else:
                 sent_panel = await self.app1.send_message(ADMIN_ID, panel_text, reply_markup=keyboard)
                 PANEL_MSG_ID = sent_panel.id
 
-            # تحديث أو إرسال البث الحي لنتائج الفحص
             if LIVE_LOG_MSG_ID:
                 await self.app1.edit_message_text(ADMIN_ID, LIVE_LOG_MSG_ID, log_text)
             else:
                 sent_log = await self.app1.send_message(ADMIN_ID, log_text)
                 LIVE_LOG_MSG_ID = sent_log.id
         except Exception as e:
-            logger.debug(f"خطأ في تحديث اللوحات: {e}")
+            logger.debug(f"خطأ تحديث اللوحة: {e}")
 
     async def log_scan_result(self, channel_name, price, status_text):
-        """إضافة نتيجة الفحص الحي وتحديث اللوحة فوراً"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"⏱️ [{timestamp}] | 📍 {channel_name} | 💰 {price}⭐ -> {status_text}"
         self.last_scans.append(log_entry)
@@ -129,12 +121,11 @@ class OmegaMultiSystem:
         await self.update_live_panel()
 
     async def rest_controller(self):
-        """تجنب الحظر التلقائي بالراحة الذكية"""
         while self.running:
             await asyncio.sleep(4 * 3600)
             self.is_resting = True
             await self.update_live_panel()
-            await asyncio.sleep(15 * 60) # راحة 15 دقيقة
+            await asyncio.sleep(15 * 60)
             self.is_resting = False
             await self.update_live_panel()
 
@@ -147,23 +138,18 @@ class OmegaMultiSystem:
         chat = message.chat
         chat_title = chat.username or chat.title or "سوق"
 
-        # 1. الحماية من فخاخ المسابقات
         if any(word in text for word in DANGER_WORDS):
             return
 
-        # 2. القناص فائق السرعة - صيد الهدايا المطورة بالتفاعل مع الأزرار
         if self.sniper_enabled:
-            # التحقق إذا كانت الرسالة من قنوات الماركت أو تحتوي على روابط الهدايا
             if chat.username in GIFT_MARKETS or any(link in text for link in ["t.me/nft/", "tg://nft", "t.me/gift/"]):
                 detected_price = None
                 target_button_index = None
 
-                # البحث عن السعر في النص
                 price_match = re.search(r'(\d+)\s*(🌟|نجمة|star|stars|⭐)', text, re.I)
                 if price_match:
                     detected_price = int(price_match.group(1))
 
-                # البحث عن السعر داخل الأزرار وزر الشراء المباشر
                 if message.reply_markup:
                     for row_idx, row in enumerate(message.reply_markup.inline_keyboard):
                         for btn_idx, button in enumerate(row):
@@ -174,17 +160,14 @@ class OmegaMultiSystem:
                                     if btn_price:
                                         detected_price = int(btn_price.group(1))
 
-                # إذا اكتشف السعر يتم معالجته فوراً وبث النتيجة حية
                 if detected_price:
                     if GIFT_PRICE_MIN <= detected_price <= GIFT_PRICE_MAX:
                         if target_button_index is not None:
-                            # سرعة البرق: كبس الزر بملي ثواني عشوائية صغيرة جداً للتفوق على المنافسين
                             await asyncio.sleep(random.uniform(0.01, 0.08))
                             try:
                                 await message.click(target_button_index)
                                 self.stats['gifts_bought'] += 1
                                 await self.log_scan_result(chat_title, detected_price, "🚀 [صيد ناجح بسعرك المطلوب!]")
-                                # إرسال إشعار فوري منفصل للتأكيد
                                 await client.send_message(ADMIN_ID, f"🎉 **[Omega - {account_tag}] صيد صاعق ناجح!**\n💰 السعر: {detected_price}⭐\n📍 المصدر: {chat_title}")
                                 return
                             except FloodWait as e:
@@ -192,16 +175,14 @@ class OmegaMultiSystem:
                             except Exception as e:
                                 await self.log_scan_result(chat_title, detected_price, f"❌ فشل الضغط: {str(e)[:15]}")
                     else:
-                        # بث مباشر لعملية الفحص الجارية لتراها في حسابك (خارج النطاق)
                         await self.log_scan_result(chat_title, detected_price, "❌ خارج ميزانيتك المقدرة")
                         return
 
-        # 3. الروليت المطور - تفاعل فوري مع الكلمات المفتاحية الجديدة للأزرار التفاعلية
         if message.reply_markup:
             for row in message.reply_markup.inline_keyboard:
                 for button in row:
                     if any(keyword in button.text.lower() for keyword in HUNT_KEYWORDS):
-                        await asyncio.sleep(random.uniform(0.4, 1.2)) # سرعة منسقة لمنع التداخل للحسابين
+                        await asyncio.sleep(random.uniform(0.4, 1.2))
                         try:
                             await message.click(button.index if hasattr(button, 'index') else 0)
                             self.stats['wins'] += 1
@@ -218,7 +199,6 @@ class OmegaMultiSystem:
         if self.app2:
             await self.app2.start()
 
-        # تشغيل مستمعي الرسائل بالتوازي للحسابين ليعملا بنفس التناغم تماماً
         @self.app1.on_message(filters.all)
         async def h1(client, message):
             await self.process_message(client, message, "الحساب الأول")
@@ -228,7 +208,6 @@ class OmegaMultiSystem:
             async def h2(client, message):
                 await self.process_message(client, message, "الحساب الثاني")
 
-        # معالج أزرار لوحة التحكم التفاعلية القادمة من حسابك لإيقاف أو تشغيل القناص يدوياً
         @self.app1.on_callback_query()
         async def cb_handler(client, callback_query: CallbackQuery):
             if callback_query.from_user.id != ADMIN_ID:
@@ -244,13 +223,33 @@ class OmegaMultiSystem:
                 await callback_query.answer("🔄 تم تحديث الأرقام الحية.")
             await self.update_live_panel()
 
-        # تشغيل المهام الدورية الخلفية حماية للاتصال المستمر
         asyncio.create_task(self.rest_controller())
-        
-        # إرسال اللوحة لأول مرة عند التشغيل بنجاح
         await self.update_live_panel()
+        
+        # التخفي الدوري للحساب الثاني
+        async def persona_scheduler():
+            while self.running:
+                await asyncio.sleep(12 * 3600)
+                if self.app2 and not self.is_resting:
+                    try:
+                        await self.app2.update_profile(
+                            first_name=random.choice(PERSONA_NAMES),
+                            bio=random.choice(PERSONA_BIOS)
+                        )
+                    except:
+                        pass
+        asyncio.create_task(persona_scheduler())
+
         logger.info("🚀 الأنظمة نشطة بالكامل وبث الفحص الحي بدأ.")
-        await asyncio.Event().wait()
+        
+        # الإيقاف الآمن والمنظم للسكربت بعد 5 ساعات و15 دقيقة للسماح للـ Workflow بإعادة تشغيله تلقائياً
+        logger.info("⏳ السكربت يعمل الآن وسيغلق تلقائياً بعد 5 ساعات و15 دقيقة للتجديد اللانهائي...")
+        await asyncio.sleep(18900)
+        
+        logger.info("🔄 جاري إغلاق الدورة الحالية بأمان لبدء الدورة التالية...")
+        await self.app1.stop()
+        if self.app2:
+            await self.app2.stop()
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
